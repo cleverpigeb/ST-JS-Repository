@@ -1,6 +1,6 @@
-# tavern_helper_template
+# ST-JS-Repository
 
-酒馆助手编写前端界面或脚本的模板.
+创建自模板的个人前端界面和脚本库。
 
 ## 使用方法
 
