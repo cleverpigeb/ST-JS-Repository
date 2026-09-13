@@ -1,0 +1,346 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "场景": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "时间": {
+          "default": "待初始化",
+          "type": "string"
+        },
+        "地点": {
+          "default": "待初始化",
+          "type": "string"
+        }
+      }
+    },
+    "关系": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "_当前关系": {
+          "default": "恋人",
+          "type": "string",
+          "enum": [
+            "同学",
+            "朋友",
+            "暧昧",
+            "恋人",
+            "亲密恋人",
+            "订婚",
+            "结婚"
+          ]
+        },
+        "_质变决斗已解锁": {
+          "default": false,
+          "type": "boolean"
+        },
+        "_关系刚刚回退": {
+          "default": false,
+          "type": "boolean"
+        },
+        "好感度本轮增量": {
+          "default": 0,
+          "type": "number"
+        },
+        "$好感度": {
+          "default": 80,
+          "type": "number"
+        },
+        "$回退预备": {
+          "default": false,
+          "type": "boolean"
+        },
+        "$邀请暂缓于": {
+          "default": "",
+          "type": "string",
+          "enum": [
+            "",
+            "同学",
+            "朋友",
+            "暧昧",
+            "恋人",
+            "亲密恋人",
+            "订婚",
+            "结婚"
+          ]
+        },
+        "$已达最高关系阶段": {
+          "default": "恋人",
+          "type": "string",
+          "enum": [
+            "同学",
+            "朋友",
+            "暧昧",
+            "恋人",
+            "亲密恋人",
+            "订婚",
+            "结婚"
+          ]
+        }
+      }
+    },
+    "朱小笋": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "心情": {
+          "default": "待初始化",
+          "type": "string"
+        },
+        "心里话": {
+          "default": "待初始化",
+          "type": "string"
+        },
+        "背包": {
+          "default": {
+            "格1": {},
+            "格2": {},
+            "格3": {}
+          },
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "enum": [
+              "格1",
+              "格2",
+              "格3"
+            ]
+          },
+          "additionalProperties": {
+            "default": {},
+            "type": "object",
+            "properties": {
+              "名称": {
+                "default": "",
+                "type": "string"
+              },
+              "数量": {
+                "default": 0,
+                "type": "number"
+              }
+            }
+          }
+        },
+        "$生命上限": {
+          "default": 120,
+          "type": "number"
+        },
+        "$精力上限": {
+          "default": 60,
+          "type": "number"
+        }
+      }
+    },
+    "主角": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "生命上限": {
+          "default": 100,
+          "type": "number"
+        },
+        "精力上限": {
+          "default": 50,
+          "type": "number"
+        },
+        "技能库": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "description": "技能 id"
+          },
+          "additionalProperties": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "装备四槽": {
+          "default": {
+            "槽1": "",
+            "槽2": "",
+            "槽3": "",
+            "槽4": ""
+          },
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "enum": [
+              "槽1",
+              "槽2",
+              "槽3",
+              "槽4"
+            ]
+          },
+          "additionalProperties": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "背包": {
+          "default": {
+            "格1": {},
+            "格2": {},
+            "格3": {}
+          },
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "enum": [
+              "格1",
+              "格2",
+              "格3"
+            ]
+          },
+          "additionalProperties": {
+            "default": {},
+            "type": "object",
+            "properties": {
+              "名称": {
+                "default": "",
+                "type": "string"
+              },
+              "数量": {
+                "default": 0,
+                "type": "number"
+              }
+            }
+          }
+        }
+      }
+    },
+    "事件": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "进行中": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "description": "事件名"
+          },
+          "additionalProperties": {
+            "default": {},
+            "type": "object",
+            "properties": {
+              "进度": {
+                "default": "待初始化",
+                "type": "string"
+              }
+            }
+          }
+        },
+        "$历史区": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "description": "事件名"
+          },
+          "additionalProperties": {
+            "default": {},
+            "type": "object",
+            "properties": {
+              "进度": {
+                "default": "待初始化",
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "决斗": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "$是否在战斗中": {
+          "default": false,
+          "type": "boolean"
+        },
+        "$本场为质变决斗": {
+          "default": false,
+          "type": "boolean"
+        },
+        "$回合数": {
+          "default": 0,
+          "type": "number"
+        },
+        "$朱小笋生命": {
+          "default": 0,
+          "type": "number"
+        },
+        "$朱小笋精力": {
+          "default": 0,
+          "type": "number"
+        },
+        "$朱小笋状态": {
+          "default": "无",
+          "type": "string",
+          "enum": [
+            "无",
+            "越想越羞",
+            "心跳失速",
+            "面不改色",
+            "脸在烧",
+            "被拿住",
+            "讲不出话",
+            "沉不住气",
+            "乱了阵脚",
+            "腿软",
+            "僵住"
+          ]
+        },
+        "$朱小笋状态剩余回合": {
+          "default": 0,
+          "type": "number"
+        },
+        "$主角生命": {
+          "default": 0,
+          "type": "number"
+        },
+        "$主角精力": {
+          "default": 0,
+          "type": "number"
+        },
+        "$主角状态": {
+          "default": "无",
+          "type": "string",
+          "enum": [
+            "无",
+            "越想越羞",
+            "心跳失速",
+            "面不改色",
+            "脸在烧",
+            "被拿住",
+            "讲不出话",
+            "沉不住气",
+            "乱了阵脚",
+            "腿软",
+            "僵住"
+          ]
+        },
+        "$主角状态剩余回合": {
+          "default": 0,
+          "type": "number"
+        },
+        "$生命上限修正倍率": {
+          "default": 1,
+          "type": "number"
+        },
+        "$本场已用稀有道具": {
+          "default": false,
+          "type": "boolean"
+        },
+        "$本场朱小笋已用道具": {
+          "default": false,
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

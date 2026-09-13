@@ -1,0 +1,203 @@
+/* 《闷骚女友朱小笋》状态栏 · 全局设计令牌
+ *
+ * 权威来源：AFV `design-spec.md` §5.8（视觉基调／语义配色／信息优先级／布局模式）。
+ * 命名一律用功能语义，禁止 `--c-blue` 这类视觉描述命名。
+ *
+ * 三族令牌：
+ *   固定族 `--hud-*`   面板骨架：纸面底、卡片次层、正文字、弱化字、铅笔灰线、横格线
+ *   分区族 `--theme-*` 常态四页各一套，由 TabBar 切换根类名来改取值
+ *   功能族 `--c-*`     跨页语义：危险／警示／完成／好感度／只读派生底色
+ *
+ * 常态与战斗态是**两套互不重叠的观感**，不是同一套皮的两个深浅：
+ *   常态   纸纹／铅笔灰／便利贴／压痕／随手涂改／暖白光
+ *   战斗态 荧光／格线／计时／脆响／卡带感
+ * 战斗态在根节点加 `.hud--battle`，整体改写固定族与分区族取值。
+ *
+ * 配色取值已按 design-spec 的可读性要求校过对比度：正文字对卡片次层 ≥ 10:1，
+ * 弱化字与各功能色对卡片次层 ≥ 4.5:1。改色时请一并复核这两条。
+ */
+
+/* 字体：design-spec 与 tavern-ui 都建议用 ZeoSeven Fonts 的更纱黑体（Sarasa）。
+ * 此处只给字族栈，不写远端 @import——没有核实过的 CDN 链接不写进交付源码；
+ * 若要接 webfont，把 ZeoSeven 给的那行 @import 加在本注释下方即可，栈名无需改。 */
+:root {
+  --font-hud: 'Sarasa UI SC', 'Sarasa Gothic SC', '更纱黑体 SC', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei',
+    sans-serif;
+  --font-num: 'Sarasa Mono SC', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}
+
+/* ── 常态：固定族 ───────────────────────────────────────────── */
+:root {
+  --hud-bg-1: #efebe0; /* 纸面底 */
+  --hud-bg-2: #faf7ef; /* 卡片次层 */
+  --hud-text: #33302b; /* 正文字 */
+  --hud-mute: #6f6a60; /* 弱化字：注解、单位、次要标签 */
+  --hud-border: #b9b2a4; /* 铅笔灰线：卡片描边、分隔 */
+  --hud-rule: #d8d2c4; /* 横格线：比描边更淡，只做纸纹 */
+
+  /* ── 常态：功能族 ── */
+  --c-danger: #b03a2e; /* 生命低位／败 */
+  --c-warning: #9a6a12; /* 状态异常／暂缓 */
+  --c-success: #35704a; /* 事件完成／胜 */
+  --c-affection: #a8465f; /* 好感度 */
+  --c-locked: #e6e1d5; /* 只读派生值底色：必须一眼看出不可编辑 */
+
+  /* ── 分区族缺省值（未进入任何分页时的兜底，取主角页那套） ── */
+  --theme-primary: #4a6f8a;
+  --theme-soft: #e7eef3;
+  --theme-accent: #2f5570;
+
+  /* ── 立绘：唯一接图入口，两处各一个变量 ──
+   * 缺省 none ＝ 用 PortraitFrame 内置的 CSS/SVG 抽象轮廓（不是空灰块）。
+   * 有图时改成 url('https://…')，轮廓会被图盖住，不需要改组件。 */
+  --portrait-she: none;
+  --portrait-you: none;
+}
+
+/* ── 常态：分区族四套 ──
+ * soft／accent 是从 primary 手工推导的浅底与深强调，没有用 color-mix()：
+ * color-mix() 里套 var() 时不支持的引擎会落到「计算值时无效」而不是回退到前一条声明，
+ * 兜底不可靠，所以三个取值一律写死。改 primary 时记得同步改另外两个。 */
+.theme-protagonist {
+  --theme-primary: #4a6f8a; /* 石板蓝 */
+  --theme-soft: #e7eef3;
+  --theme-accent: #2f5570;
+}
+.theme-zhuxiaosun {
+  --theme-primary: #8f5a72; /* 暗紫红 */
+  --theme-soft: #f3e9ee;
+  --theme-accent: #71425a;
+}
+.theme-skills {
+  --theme-primary: #5f6b46; /* 橄榄墨 */
+  --theme-soft: #ecefe3;
+  --theme-accent: #46512f;
+}
+.theme-events {
+  --theme-primary: #8a6a2f; /* 便利贴赭黄 */
+  --theme-soft: #f4ecdc;
+  --theme-accent: #6d5120;
+}
+
+/* ── 战斗态：整套改写 ──
+ * 与常态刻意不重叠：暗底、格线、荧光青。功能族同步改亮，否则纸面色在暗底上读不出来。 */
+.hud--battle {
+  --hud-bg-1: #171a1c;
+  --hud-bg-2: #21262a;
+  --hud-text: #e8f0f2;
+  --hud-mute: #93a1a8;
+  --hud-border: #3c464c;
+  --hud-rule: #2b3237;
+
+  --theme-primary: #4fd6c1; /* 荧光青 */
+  --theme-soft: #263033;
+  --theme-accent: #7ef0dc;
+
+  --c-danger: #ff6b6b;
+  --c-warning: #f5c451;
+  --c-success: #7ee08a;
+  --c-affection: #ff8fb1;
+  --c-locked: #2b3237;
+}
+
+/* ── 复位与基底 ── */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* 不给 html/body 设 height:100%：酒馆助手按内容高度自适应 iframe，
+ * 撑满高度会让面板高度算错。 */
+body {
+  font-family: var(--font-hud);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--hud-text);
+  background: var(--hud-bg-1);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 数值一律用等宽，避免生命/精力跳动时宽度抖 */
+.hud-num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 卡片次层：常态是压痕纸片，战斗态被下面那条改成格线板 */
+.hud-surface {
+  background: var(--hud-bg-2);
+  border: 1px solid var(--hud-border);
+  border-radius: 3px;
+  box-shadow: 0 1px 0 rgb(0 0 0 / 6%);
+}
+.hud--battle .hud-surface {
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 4%);
+}
+
+/* 纸纹横格：常态用横线，战斗态换成网格 */
+.hud-ruled {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 21px,
+    var(--hud-rule) 21px,
+    var(--hud-rule) 22px
+  );
+}
+.hud--battle .hud-ruled {
+  background-image: repeating-linear-gradient(to bottom, transparent 0 21px, var(--hud-rule) 21px 22px),
+    repeating-linear-gradient(to right, transparent 0 21px, var(--hud-rule) 21px 22px);
+}
+
+/* 只读派生值：底色 + 不可选中，一眼看出没有编辑入口 */
+.hud-locked {
+  background: var(--c-locked);
+  color: var(--hud-mute);
+  border-radius: 2px;
+  padding: 0 4px;
+  cursor: default;
+}
+
+/* 反馈短而克制：不做弹跳／庆祝类动效（design-spec §5.8 交互人格） */
+.hud-tap {
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hud-tap {
+    transition: none;
+  }
+}
+
+/* ── 只读降级视图 ──
+ * 由 `index.ts` 的 mountDegraded() 用 jQuery 直接拼装，**不经过 Vue**：
+ * 它要能在 Vue/pinia 自身出问题时也显示，所以样式必须留在全局 CSS 里而不是组件 scoped 块。 */
+.hud-degraded {
+  margin: 8px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--c-warning);
+}
+.hud-degraded__title {
+  font-weight: 700;
+  color: var(--c-warning);
+  margin-bottom: 6px;
+}
+.hud-degraded__desc {
+  color: var(--hud-mute);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.hud-degraded__reason {
+  font-family: var(--font-num);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--hud-text);
+  background: var(--c-locked);
+  border-radius: 2px;
+  padding: 8px;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
