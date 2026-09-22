@@ -48,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import { lookupItem, UNREGISTERED_TIER } from '../data/items';
+import { lookupItem, UNREGISTERED_TIER, type Tier } from '../data/items';
 import { BAG_SLOTS, type Bag } from '../logic/bag';
 import EditableField from './EditableField.vue';
 
@@ -74,9 +74,19 @@ function tierOf(slot: Slot) {
   return lookupItem(props.bag[slot].名称)?.档位 ?? UNREGISTERED_TIER;
 }
 
+/** 档位 → CSS 修饰名。**五项一个都不能少**：`tierOf()` 查不到时返回 `UNREGISTERED_TIER`，
+ * 只列已登记的四项会让索引类型对不上（TS2339）。写成显式 `Record` 而不是就地字面量，
+ * 是为了将来 `Tier` 加一档时这里直接报缺键，而不是静默落到兜底。 */
+const TIER_CLASS: Record<Tier | '非战斗' | typeof UNREGISTERED_TIER, string> = {
+  常见: 'common',
+  精良: 'fine',
+  稀有: 'rare',
+  非战斗: 'offfield',
+  [UNREGISTERED_TIER]: 'unknown',
+};
+
 function tierClass(slot: Slot) {
-  const tier = tierOf(slot);
-  return { 常见: 'common', 精良: 'fine', 稀有: 'rare', 非战斗: 'offfield' }[tier] ?? 'unknown';
+  return TIER_CLASS[tierOf(slot)];
 }
 
 function effectOf(slot: Slot) {

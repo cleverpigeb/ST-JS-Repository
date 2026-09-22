@@ -8,25 +8,36 @@
         <path d="M7 54c0-9.6 7.6-15.5 17-15.5S41 44.4 41 54" />
       </svg>
 
-      <!-- 图片源走一个 CSS 变量：后续接图只改 global.css 里 --portrait-she／--portrait-you，
-           不动布局也不改本组件。变量为 none 时这层透明，轮廓透出来。 -->
-      <div class="pf__img" role="img" :aria-label="alt"></div>
+      <!-- 图片源两条路：
+           `src` 有值时用它（主角走酒馆 persona 头像，运行期才知道），否则落到 CSS 变量
+           --portrait-she／--portrait-you（接固定素材只改 global.css，不动布局也不改本组件）。
+           两条都空时这层透明，轮廓透出来。 -->
+      <div class="pf__img" role="img" :aria-label="alt" :style="imageStyle"></div>
     </div>
     <figcaption v-if="caption" class="pf__caption">{{ caption }}</figcaption>
   </figure>
 </template>
 
 <script setup lang="ts">
-withDefaults(
+const props = withDefaults(
   defineProps<{
-    /** she ＝ 她的正面立绘（朱小笋页顶部）；you ＝ 主角背面剪影（战斗态对局面板下方）。 */
+    /** she ＝ 她的正面立绘（朱小笋页）；you ＝ 主角（主角页头像、战斗态对局面板下方的背影）。 */
     who: 'she' | 'you';
     alt: string;
     /** 固定长宽比，CSS aspect-ratio 语法。 */
     ratio?: string;
     caption?: string;
+    /** 运行期取到的图片地址，优先于 CSS 变量。取不到传空串即可，会落回轮廓。 */
+    src?: string;
   }>(),
-  { ratio: '3 / 4', caption: '' },
+  { ratio: '3 / 4', caption: '', src: '' },
+);
+
+/** 地址里的双引号转义掉再拼进 `url("…")`。
+ * 酒馆的头像路径含空格（`User Avatars/…`）所以必须带引号；而路径来自宿主接口、不是玩家输入，
+ * 这里只防拼串拼坏，不当作 XSS 边界——`background-image` 本身不执行脚本。 */
+const imageStyle = computed(() =>
+  props.src ? { backgroundImage: `url("${props.src.replace(/"/g, '%22')}")` } : undefined,
 );
 </script>
 

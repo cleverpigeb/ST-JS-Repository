@@ -1,7 +1,5 @@
 <template>
   <section class="te">
-    <EditToolbar title="事件" :editing="editing" @start="start" @submit="submit" @cancel="cancel" />
-
     <!-- ── 进行中 ── -->
     <div class="te__block">
       <h4 class="te__h">
@@ -89,19 +87,33 @@
 
 <script setup lang="ts">
 import { duplicatedNames, toMaps, toRows, type EventRow } from '../logic/events';
+import { useEditMode } from '../logic/edit-mode';
 import { useDataStore } from '../store';
-import EditToolbar from './EditToolbar.vue';
 
 /** 事件页（design-spec §5.8 字段落位表）：
  * `事件.进行中`（增删改 ＋ 标记完成）／`事件.$历史区`（展开区 ＋ 取回）。
  *
  * 两张表在编辑期摊成一串行、用 `归档` 布尔区分，所以「标记完成」「取回」都只是翻一个布尔，
- * 不必在两个 record 之间搬键；搬移在提交时由 `toMaps()` 一次完成。 */
+ * 不必在两个 record 之间搬键；搬移在提交时由 `toMaps()` 一次完成。
+ *
+ * 编辑开关是全局的（`logic/edit-mode.ts`），本页只登记三件套。 */
 const store = useDataStore();
 
-const editing = ref(false);
 const historyOpen = ref(false);
 const draft = reactive({ rows: [] as EventRow[] });
+
+const editing = useEditMode({
+  start: () => {
+    draft.rows = toRows(store.data.事件.进行中, store.data.事件.$历史区);
+  },
+  submit: () => {
+    const { 进行中, $历史区 } = toMaps(draft.rows);
+    Object.assign(store.data, { 事件: { 进行中, $历史区 } });
+  },
+  cancel: () => {
+    // 草稿直接丢弃，下次 start() 会整份重取
+  },
+});
 
 /** 显示态直接从 store 摊行，编辑态读草稿。两边都带上 index，供编辑态回写草稿定位。 */
 const rows = computed<(EventRow & { index: number })[]>(() => {
@@ -112,15 +124,6 @@ const rows = computed<(EventRow & { index: number })[]>(() => {
 const ongoingRows = computed(() => rows.value.filter(row => !row.归档));
 const historyRows = computed(() => rows.value.filter(row => row.归档));
 const dupes = computed(() => duplicatedNames(draft.rows));
-
-function start() {
-  draft.rows = toRows(store.data.事件.进行中, store.data.事件.$历史区);
-  editing.value = true;
-}
-
-function cancel() {
-  editing.value = false;
-}
 
 function addRow() {
   draft.rows.push({ 事件名: '', 进度: '', 归档: false });
@@ -137,12 +140,6 @@ function archive(index: number) {
 
 function restore(index: number) {
   draft.rows[index].归档 = false;
-}
-
-function submit() {
-  const { 进行中, $历史区 } = toMaps(draft.rows);
-  Object.assign(store.data, { 事件: { 进行中, $历史区 } });
-  editing.value = false;
 }
 </script>
 

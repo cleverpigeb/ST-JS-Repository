@@ -212,6 +212,74 @@
         }
       }
     },
+    "$技能表": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "description": "技能 id"
+      },
+      "additionalProperties": {
+        "default": {},
+        "type": "object",
+        "properties": {
+          "阵营": {
+            "default": "主角",
+            "type": "string",
+            "enum": [
+              "主角",
+              "朱小笋"
+            ]
+          },
+          "适用段": {
+            "default": "通用",
+            "type": "string",
+            "enum": [
+              "通用",
+              "同学",
+              "朋友",
+              "暧昧",
+              "恋人",
+              "亲密恋人",
+              "订婚",
+              "结婚"
+            ]
+          },
+          "类别": {
+            "default": "攻击",
+            "type": "string",
+            "enum": [
+              "攻击",
+              "变化"
+            ]
+          },
+          "威力": {
+            "default": 0,
+            "type": "number"
+          },
+          "命中": {
+            "default": 0,
+            "type": "number"
+          },
+          "暴击": {
+            "default": 0,
+            "type": "number"
+          },
+          "精力": {
+            "default": 0,
+            "type": "number"
+          },
+          "附加效果": {
+            "default": "",
+            "type": "string"
+          },
+          "叙事指导": {
+            "default": "",
+            "type": "string"
+          }
+        }
+      }
+    },
     "事件": {
       "default": {},
       "type": "object",

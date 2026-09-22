@@ -170,6 +170,50 @@ body {
   }
 }
 
+/* ── 左右布局：左栏立绘＋属性条，右栏局部分页 ──
+ * 主角页／朱小笋页／技能页三处同一套骨架，所以放全局而不是各自 scoped 重写三遍。
+ *
+ * 断点 440px 不是猜的：左栏 min-width 132px ＋ 右栏至少要容下「已获得 技能名 攻击 威力 60% 」这一行，
+ * 再窄就会把技能行挤成每词一行。到点后改成单栏纵排，左栏（脸和血条）仍在最上面，阅读顺序不变。
+ * iframe 宽度就是消息楼层宽度，所以这条媒体查询量的是玩家实际看到的那一栏宽度。 */
+.hud-split {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.hud-split__side {
+  flex: 0 0 34%;
+  min-width: 132px;
+  max-width: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hud-split__main {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+@media (max-width: 440px) {
+  .hud-split {
+    display: block;
+  }
+
+  .hud-split__side {
+    max-width: none;
+    margin-bottom: 10px;
+  }
+
+  /* 单栏下左栏的立绘不该占满整宽——一张 3:4 的脸铺开会把血条挤到第二屏 */
+  .hud-split__portrait {
+    width: 44%;
+    max-width: 150px;
+    margin: 0 auto;
+  }
+}
+
 /* ── 只读降级视图 ──
  * 由 `index.ts` 的 mountDegraded() 用 jQuery 直接拼装，**不经过 Vue**：
  * 它要能在 Vue/pinia 自身出问题时也显示，所以样式必须留在全局 CSS 里而不是组件 scoped 块。 */

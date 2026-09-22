@@ -53,14 +53,16 @@
 </template>
 
 <script setup lang="ts">
-import { herSkillSet } from '../data/skills';
 import { STAGE_ORDER } from '../data/stages';
 import { deferInvite, openQualitativeDuel } from '../logic/duel';
+import { herSkillSet } from '../logic/skill-table';
 import { useDataStore } from '../store';
 
 /** 邀请态（design-spec §5.7.3）。
  *
- * 这块面板是整张卡里**唯一**说破「亲密决斗」这件事的地方：剧情侧一个字不提，模型也不知道它出现过。
+ * 剧情侧一个字不提「亲密决斗」这件事，模型也不知道它出现过——这条口径没变。
+ * 但本面板**不再是**唯一说破它的界面：§10.1 line 591 裁定给常态加了请愿决斗入口
+ *（`PetitionBar.vue`），那块也会在界面上点明这件事。本面板仍是唯一说**质变决斗**的地方。
  * 它由 StatusBar 的 `mode` 判定单独挂载，所以本组件不再自己判准入条件。
  *
  * 两个按钮各写一个字段，两个字段**都不提供控件**（§5.8 九项裁决，line 253：
@@ -78,7 +80,7 @@ import { useDataStore } from '../store';
 const store = useDataStore();
 
 /** 她的招表按「已达最高关系阶段」查，第一版只有恋人／亲密恋人两套；查不到时如实说明。 */
-const herSkills = computed(() => herSkillSet(store.data.关系.$已达最高关系阶段));
+const herSkills = computed(() => herSkillSet(store.data.$技能表, store.data.关系.$已达最高关系阶段));
 
 /** 赢了往前走一格（草案 §10.2）。结婚段没有下一格，显示成一句话而不是空白。 */
 const nextStage = computed<string>(() => {

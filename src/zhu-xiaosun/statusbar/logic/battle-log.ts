@@ -1,4 +1,4 @@
-import { skillOwner } from '../data/skills';
+import { skillOwner, type Faction, type SkillTable } from './skill-table';
 
 /** 从**本层正文**里摘战斗流水。
  *
@@ -13,7 +13,8 @@ import { skillOwner } from '../data/skills';
  * **本模块只复读，不参与任何结算**：摘漏一条不影响任何数值，DuelHud 的血条与状态全部读 MVU。
  * 组件必须把「尽力摘取」如实写在界面上，不得让人以为这是权威流水。
  *
- * 纯函数，不碰宿主 API：取原文在组件里做，方便单独喂字符串验证。
+ * 纯函数，不碰宿主 API：取原文在组件里做，方便单独喂字符串验证。技能表同理**由调用方传入**
+ * （`$技能表` 现在是 MVU 变量，不是 import 得到的静态表），本模块不抓 store。
  */
 
 export type LogKind = '先攻' | '行动' | '状态' | '命中' | '例外' | '回合结束';
@@ -21,8 +22,8 @@ export type LogKind = '先攻' | '行动' | '状态' | '命中' | '例外' | '�
 export interface LogEntry {
   text: string;
   kind: LogKind;
-  /** 由招名反查归属（双方招表互不相交）；摘不出招名时为 `null`，不猜人名。 */
-  side: '主角' | '朱小笋' | null;
+  /** 由 `阵营` 字段反查归属；摘不出招名、或表里没有这一招时为 `null`，不猜人名。 */
+  side: Faction | null;
   /** 〈…〉里的名字，可能是技能名也可能是状态名；没有则空串。 */
   name: string;
 }
@@ -68,7 +69,7 @@ function toFragments(text: string): string[] {
     .filter(line => line !== '');
 }
 
-export function extractLog(raw: string): LogEntry[] {
+export function extractLog(raw: string, table: SkillTable): LogEntry[] {
   const entries: LogEntry[] = [];
   let previous = '';
 
@@ -91,7 +92,7 @@ export function extractLog(raw: string): LogEntry[] {
     previous = fragment;
 
     const name = bracket ? bracket[1].trim() : '';
-    const owner = name ? skillOwner(name) : '未知';
+    const owner = name ? skillOwner(table, name) : '未知';
     entries.push({
       text: fragment,
       kind: hit.kind,

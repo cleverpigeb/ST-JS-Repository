@@ -138,10 +138,11 @@
 
 <script setup lang="ts">
 import { isRare, lookupItem, UNREGISTERED_TIER, usableInBattle } from '../data/items';
-import { EQUIP_SLOTS, lookupSkill } from '../data/skills';
+import { EQUIP_SLOTS } from '../data/skills';
 import { BAG_SLOTS, type BagSlot } from '../logic/bag';
 import { lastSkillOf, type LogEntry } from '../logic/battle-log';
 import { closeDuel, youEpCap } from '../logic/duel';
+import { lookupSkill } from '../logic/skill-table';
 import { useDataStore } from '../store';
 import PortraitFrame from './PortraitFrame.vue';
 import SkillLine from './SkillLine.vue';
@@ -213,9 +214,9 @@ function skillGate(slot: (typeof EQUIP_SLOTS)[number]): Gate {
   if (!id) {
     return { disabled: true, reason: '这一槽是空的' };
   }
-  const spec = lookupSkill(id);
+  const spec = lookupSkill(store.data.$技能表, id);
   if (!spec) {
-    return { disabled: true, reason: '草案 §6 没有这一招，面板不替它补数值' };
+    return { disabled: true, reason: '技能表里没有这一招，面板不替它补数值' };
   }
   if (blockedSkill.value === id) {
     return { disabled: true, reason: '「讲不出话」：上一手就是这招，本轮封锁' };

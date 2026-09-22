@@ -1,8 +1,6 @@
 <template>
   <section class="bp">
-    <EditToolbar title="对局" :editing="editing" @start="start" @submit="submit" @cancel="cancel" />
-
-    <!-- 编辑态：整页切换（§5.8「整页切换编辑态、不做逐字段小铅笔」）。
+    <!-- 编辑态：整个面板一起切（开关在 StatusBar 右上角）。
          对局面板与指令区在编辑时一并撤掉——同一批数字不该同时以只读和输入两种形态出现，
          而且编辑中途还能出手会让「兜底」变成「改完再打」。 -->
     <template v-if="editing">
@@ -102,6 +100,17 @@
     <template v-else>
       <DuelHud />
 
+      <!-- 本场的偏差判档结果。§10.1 line 595 要求兜底那一层「在面板上写明『判档没成，按 0 档开打，
+           可自行调高』」——而按下「发起决斗」的那一瞬面板就翻成了战斗态，常态那块入口已经卸载，
+           所以这句话只能由这里接着说。 -->
+      <p v-if="verdict" class="bp__tier" :class="{ 'bp__tier--warn': verdict.warn }">
+        <i
+          :class="verdict.warn ? 'fa-solid fa-triangle-exclamation' : 'fa-solid fa-scale-balanced'"
+          aria-hidden="true"
+        ></i>
+        {{ verdict.text }}
+      </p>
+
       <!-- 主角背面剪影：§5.8 立绘占位明写「在**战斗态对局面板下方**」。
            指令区里那张小头像是同一个组件、同一个 CSS 变量，于是 §11.3 的
            「主角头像＝与左下背影同一形象」自动成立，不需要两套素材。 -->
@@ -112,7 +121,7 @@
       </ErrorBoundary>
 
       <ErrorBoundary label="行动选择">
-        <CommandBar :entries="log" @edit="start" />
+        <CommandBar :entries="log" @edit="startEditing" />
       </ErrorBoundary>
     </template>
   </section>
@@ -123,12 +132,13 @@ import { MULTIPLIER_TIERS } from '../data/stages';
 import { resetRounds, STATE_OPTIONS, type StateName } from '../data/states';
 import { extractLog, type LogEntry } from '../logic/battle-log';
 import { herEpCap, herHpCap, sideStatePatch, youEpCap, youHpCap } from '../logic/duel';
+import { lastVerdict } from '../logic/duel-tier';
+import { startEditing, useEditMode } from '../logic/edit-mode';
 import type { FieldOption } from '../logic/field-option';
 import { useDataStore } from '../store';
 import CommandBar from './CommandBar.vue';
 import DuelHud from './DuelHud.vue';
 import EditableField from './EditableField.vue';
-import EditToolbar from './EditToolbar.vue';
 import ErrorBoundary from './ErrorBoundary.vue';
 import PortraitFrame from './PortraitFrame.vue';
 import SevenBlockLog from './SevenBlockLog.vue';
@@ -158,7 +168,7 @@ const logError = ref('');
 function readLog() {
   try {
     const message = getChatMessages(getCurrentMessageId())[0]?.message ?? '';
-    log.value = extractLog(message);
+    log.value = extractLog(message, store.data.$技能表);
     logError.value = '';
   } catch (error) {
     log.value = [];
@@ -167,8 +177,6 @@ function readLog() {
 }
 
 readLog();
-
-const editing = ref(false);
 
 /** 草稿层：不直绑 `store.data`，理由见 `EditableField.vue` 注释（deep watch 会逐字符回写 MVU）。 */
 const draft = reactive({
@@ -182,6 +190,30 @@ const draft = reactive({
 });
 
 const isQualitative = computed(() => store.data.决斗.$本场为质变决斗);
+
+/** 本场的偏差判档结果，读 `logic/duel-tier.ts` 的模块级 `lastVerdict`。
+ *
+ * **质变决斗一律不显示**：那条路根本不经过判档（§10.1 第六轮限定，倍率恒 ×1.0），
+ * 而 `lastVerdict` 是模块级的、会留着上一场请愿的结果——不挡这一道，质变决斗里就会挂一句陈年提示。
+ *
+ * 刷新或换层后 `lastVerdict` 为空，这一行随之消失。代价在 `duel-tier.ts` 里已如实写下：
+ * 丢的只是解释，倍率本身在 MVU 里，编辑态照旧改得动。
+ *
+ * 裁定只要求兜底那一层写在面板上，前两层是顺带显示的：她的血凭什么是 300，玩家有权当场看见。
+ * 倍率文案取 `MULTIPLIER_TIERS` 的 `label`，不用 `${倍率}` 插值——`String(1.0)` 是 `"1"`，
+ * 会把四档里的 ×1.0 显示成 ×1。 */
+const verdict = computed(() => {
+  const result = isQualitative.value ? null : lastVerdict.value;
+  if (!result) {
+    return null;
+  }
+  return result.来源 === '兜底'
+    ? { warn: true, text: `${result.提示}——从下面的「战斗内编辑」改「她的生命上限修正倍率」。` }
+    : {
+        warn: false,
+        text: `本场偏差 ${result.档位} 档，她的生命上限 ${MULTIPLIER_TIERS[result.档位].label}（档位只改难度，不改结果）。`,
+      };
+});
 
 const stateOptions: FieldOption[] = STATE_OPTIONS.map(name => ({ value: name, label: name }));
 
@@ -207,11 +239,6 @@ function start() {
   draft.主角精力 = duel.$主角精力;
   draft.主角状态 = duel.$主角状态;
   draft.倍率 = duel.$生命上限修正倍率;
-  editing.value = true;
-}
-
-function cancel() {
-  editing.value = false;
 }
 
 /** 提交。夹取在输入时已由 `EditableField` 做过一遍，这里再夹一次是收口：
@@ -239,8 +266,17 @@ function submit() {
       // `$回合数` 不写：只读，由脚本推进。
     },
   });
-  editing.value = false;
 }
+
+/** 指令区那个「改数据」按钮发的是同一个全局开关（`@edit="startEditing"`），
+ * 所以战斗态里从指令区进编辑，与从右上角进是同一条路。 */
+const editing = useEditMode({
+  start,
+  submit,
+  cancel: () => {
+    // 草稿直接丢弃，下次 start() 会整份重取
+  },
+});
 </script>
 
 <style lang="scss" scoped>
@@ -248,6 +284,23 @@ function submit() {
   margin: 8px auto 0;
   width: 38%;
   max-width: 120px;
+}
+
+/* 判档结果贴着对局面板走：它解释的就是上面那条血条的分母 */
+.bp__tier {
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--hud-mute);
+
+  i {
+    margin-right: 3px;
+  }
+}
+
+/* 兜底那一层是要人动手的，不能跟普通说明一个颜色 */
+.bp__tier--warn {
+  color: var(--c-warning);
 }
 
 .bp__form {

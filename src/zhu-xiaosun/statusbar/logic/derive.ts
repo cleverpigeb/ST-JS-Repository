@@ -15,7 +15,8 @@ import { STAGE_CAPS, STAGE_ORDER, type Stage } from '../data/stages';
  *
  * 刻意不动的三个字段：`好感度本轮增量`（模型侧唯一入口，面板改它等于替模型发言）、
  * `$回退预备` 与 `_关系刚刚回退`（§1.3 描述的是增量结算路径上的信号，面板手动改总值不是那条路径）。
- * design-spec §5.8 的字段落位表也没给这三项控件。
+ * design-spec §5.8 的字段落位表也没给这三项控件。**这三项由 `logic/settle.ts` 在每层结算时维护**——
+ * 那是模型输出的结算通道，与本文件的手改通道刻意分开，不要合并。
  */
 export function relationPatch(
   data: Schema,

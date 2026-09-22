@@ -102,3 +102,21 @@ git config --global merge.ours.driver true
 ## 许可证
 
 [Aladdin](LICENSE)
+
+## 朱小笋项目接入约定（2026-09-08）
+
+本仓是通过 Use this template 创建的自有源码、编译和 CDN 仓，不再是旧的独立产物仓。角色卡设计与 forge 工程仍在本地 AFV 治理仓，AFV 永不推远程；本仓不接管角色卡正文、世界书或验收。`src/` 是前端源码真源，`dist/` 是可重建的 Git 跟踪产物，旧 `character_cards/` 布局和跨仓 junction／robocopy 中转不再使用。
+
+本卡路径按其 AFV `design-spec.md` §5.8 约定：源码 `src/zhu-xiaosun/statusbar/`，入口为 `index.ts` 与 `index.html`，输出 `dist/zhu-xiaosun/statusbar/index.html`。沿用当前 webpack 原生映射，不需要改输出配置。`opening-form` 只是后续界面名预留，不代表本轮新增功能。`schema.ts` 的维护真源在 AFV；编码时单向复制到 `src/zhu-xiaosun/schema.ts` 并随前端源码维护版本，状态栏从 `../schema` 导入，禁止反向覆盖 AFV。
+
+本地命令均在本仓根目录执行：`pnpm watch` 开发监听，`pnpm build` 生产构建；两者默认都扫描 `示例/` 与 `src/`，不是本卡隔离构建。保留示例。正式交付不用 watch 的开发产物，build 前先停止 watcher。首次及后续编译应以 webpack 无错误和目标文件生成判定，不能只凭进程存活或「推送更新事件」提示判定成功。
+
+Live Server 在本仓根目录提供文件，5500 为示例端口；状态栏本地地址是 `http://localhost:5500/dist/zhu-xiaosun/statusbar/index.html`。Socket.IO 实时通知端口是 6621，酒馆助手需开启「允许监听」。若实际服务器缺跨端口 CORS 响应头，需在开发配置中处理；本轮没有启动服务器或验证酒馆链接。
+
+正式 CDN 使用 `https://testingcf.jsdelivr.net/gh/cleverpigeb/ST-JS-Repository@main/dist/zhu-xiaosun/statusbar/index.html`。`@main` 跟随分支，不锁定 tag 或 commit；仅本卡采用此约定，上文模板示例保持原样。根据 [jsDelivr 官方说明](https://github.com/jsdelivr/jsdelivr#github)，省略 ref 会优先取最新 semver tag（无 tag 才回退默认分支），不能将其等同于 main；Branches 缓存约 12 小时，版本别名约 7 天，另有镜像和浏览器缓存，推送不等于立即更新。
+
+按当前 `bundle.yaml`，推送 main/master 的非纯 dist 变更可触发 Node 24 + pnpm 10 的构建、bot 回写产物及自动 tag；正常流程是推源码、等工作流成功、同步 bot 提交，再核对 dist。自动 tag 流程还可能删除前一个 tag，不据此把 tag 当本卡不可变归档。远程 Actions 的读写和 PR 权限仍需按上文 README 配置；配置文件存在不表示已启用或已运行成功。`sync_template.yaml` 通过 PR 提出模板更新，接受前核对项目差异；`.github/.templatesyncignore` 是排除同步的入口。
+
+构建的附带动作也属于写入范围：`pnpm dump` 会导出 schema，生产模式会调用 `pnpm sync bundle all`，watch 会启动 `pnpm sync watch all -f`；当前 `tavern_sync.yaml` 只有模板示例。本卡不在这里注册，不把同步器路径指向 AFV，不与 tavern-cards/forge 并行维护角色卡。
+
+本轮只登记接入约定，`src/` 尚只有占位文件、没有朱小笋实现，`dist/` 尚未生成；当前公共链接不能视为已交付。没有运行 install/watch/build、修改全局 Git 配置、提交或推送。开发时沿用用户 Windows 环境，不用 Linux 依赖覆盖现有 Windows node_modules。

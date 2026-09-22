@@ -26,11 +26,23 @@
         </ErrorBoundary>
       </KeepAlive>
     </div>
+
+    <!-- 请愿决斗入口（草案 §10.1 line 591 裁定指名「玩家在常态面板点『发起决斗』」）。
+         挂在四页**之外**：它不是第五页数据，是一个作用于整个常态的动作，
+         所以放在标签页体下面、跟着根节点吃同一套 `--theme-*`。
+
+         照旧各套一层 ErrorBoundary（§5.8 分区抛错必须隔离）：判档是这张卡唯一一处由前端**额外**
+         发起的静默模型调用（指令区那边走的是 `/trigger`，触发的是正文那一拍），
+         它抛错时四页数据不该跟着白掉。 -->
+    <ErrorBoundary label="发起决斗">
+      <PetitionBar />
+    </ErrorBoundary>
   </div>
 </template>
 
 <script setup lang="ts">
 import ErrorBoundary from './ErrorBoundary.vue';
+import PetitionBar from './PetitionBar.vue';
 import TabBar from './TabBar.vue';
 import TabEvents from './TabEvents.vue';
 import TabProtagonist from './TabProtagonist.vue';
