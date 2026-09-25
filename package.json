@@ -71,7 +71,10 @@
     "vue-eslint-parser": "^10.4.1",
     "vue-loader": "^17.4.2",
     "vue-style-loader": "^4.1.3",
+<<<<<<< HEAD
     "vue-tsc": "3.3.11",
+=======
+>>>>>>> f447e54f4effc7980891d89ab7e9b3c9aa02737e
     "webpack": "^5.111.1",
     "webpack-cli": "^7.2.3",
     "webpack-obfuscator": "^3.6.1",
@@ -106,5 +109,19 @@
     "vue3-pixi": "1.0.1",
     "yaml": "^2.9.1",
     "zod": "^4.6.5"
+<<<<<<< HEAD
+=======
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@parcel/watcher",
+      "@tailwindcss/oxide",
+      "electron",
+      "esbuild",
+      "javascript-obfuscator",
+      "unrs-resolver",
+      "vue-demi"
+    ]
+>>>>>>> f447e54f4effc7980891d89ab7e9b3c9aa02737e
   }
 }
