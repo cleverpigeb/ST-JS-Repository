@@ -80,18 +80,16 @@
               editing
               :options="KIND_OPTIONS"
               :model-value="spec.类别"
-              hint="切到「变化」会当场把威力与暴击归零；切回「攻击」会把两项抬到各自下限（§6.1）。"
+              hint="只改类别本身；威力与暴击不会被连带改动（§6.1 的形状约束由生成技能那一侧负责）。"
               @update:model-value="value => setKind(value)"
             />
             <EditableField
               label="威力"
               type="number"
               editing
-              :readonly="spec.类别 === '变化'"
-              :display-as="spec.类别 === '变化' ? '0（变化类固定）' : ''"
-              :min="powerRange.min"
-              :max="powerRange.max"
-              :step="powerRange.step"
+              :min="SKILL_BOUNDS.min"
+              :max="SKILL_BOUNDS.max"
+              :step="SKILL_BOUNDS.step"
               :model-value="spec.威力"
               :hint="powerHint"
               @update:model-value="value => setNum('威力', value)"
@@ -100,22 +98,20 @@
               label="命中"
               type="number"
               editing
-              :min="HIT_BOUNDS.min"
-              :max="HIT_BOUNDS.max"
-              :step="HIT_BOUNDS.step"
+              :min="SKILL_BOUNDS.min"
+              :max="SKILL_BOUNDS.max"
+              :step="SKILL_BOUNDS.step"
               :model-value="spec.命中"
-              :hint="`${HIT_BOUNDS.min}–${HIT_BOUNDS.max}%，${HIT_BOUNDS.step} 一档；变化招的命中率就是它附加效果的判定率`"
+              :hint="hitHint"
               @update:model-value="value => setNum('命中', value)"
             />
             <EditableField
               label="暴击"
               type="number"
               editing
-              :readonly="spec.类别 === '变化'"
-              :display-as="spec.类别 === '变化' ? '—（变化类无暴击）' : ''"
-              :min="critRange.min"
-              :max="critRange.max"
-              :step="critRange.step"
+              :min="SKILL_BOUNDS.min"
+              :max="SKILL_BOUNDS.max"
+              :step="SKILL_BOUNDS.step"
               :model-value="spec.暴击"
               :hint="critHint"
               @update:model-value="value => setNum('暴击', value)"
@@ -124,11 +120,11 @@
               label="精力"
               type="number"
               editing
-              :min="EP_BOUNDS.min"
-              :max="EP_BOUNDS.max"
-              :step="EP_BOUNDS.step"
+              :min="SKILL_BOUNDS.min"
+              :max="SKILL_BOUNDS.max"
+              :step="SKILL_BOUNDS.step"
               :model-value="spec.精力"
-              :hint="`${EP_BOUNDS.min}–${EP_BOUNDS.max}，${EP_BOUNDS.step} 一档；出手一次就扣这么多`"
+              hint="填什么就是什么，只拦负数；出手一次就扣这么多。"
               @update:model-value="value => setNum('精力', value)"
             />
             <EditableField
@@ -137,7 +133,7 @@
               block
               :model-value="spec.附加效果"
               placeholder="留空＝没有附加效果"
-              hint="一句话写清状态与回合数，例：令对方陷入「僵住」1 回合。"
+              :hint="effectHint"
               @update:model-value="value => setText('附加效果', value)"
             />
             <EditableField
@@ -230,11 +226,7 @@ import { CRIT_MULTIPLIER, STAGE_ORDER } from '../data/stages';
 import { useEditMode } from '../logic/edit-mode';
 import type { FieldOption } from '../logic/field-option';
 import {
-  applyKind,
-  critBounds,
-  EP_BOUNDS,
-  HIT_BOUNDS,
-  powerBounds,
+  SKILL_BOUNDS,
   skillBrief,
   type Faction,
   type SkillKind,
@@ -379,22 +371,30 @@ const spec = computed<SkillSpec | null>(() =>
   Object.hasOwn(draft.技能表, picked.value) ? draft.技能表[picked.value] : null,
 );
 
-/** 边界随「类别」变，所以按当前类别现算（草案 §6.1 字段表）。没选中时给攻击类的那套占位，
- * 反正控件在 `v-if="spec"` 里面，算出来也不会被用到。 */
-const powerRange = computed(() => powerBounds(spec.value?.类别 ?? '攻击'));
-const critRange = computed(() => critBounds(spec.value?.类别 ?? '攻击'));
+/** 四个数值字段共用同一条边界：下限 0、无上限、无档位（草案 §6.1 line 274，2026-09-24 裁定）。
+ * 不再随「类别」变——变化类的威力与暴击也照样能填，规则与理由都在 `SKILL_BOUNDS` 的注释里。 */
+const powerHint =
+  '填什么就是什么，只拦负数。§6.1 的「攻击类 ≥ 10、变化类固定 0」管的是生成技能时该给出什么招，不是这一栏的闸。';
 
-const powerHint = computed(() =>
-  spec.value?.类别 === '变化'
-    ? '变化类威力固定 0（§6.1），这一栏不给改。'
-    : `下限 ${powerBounds('攻击').min}，不设上限：§6.1 只写了下限，§6.2 的 100 分预算是生成技能时的规则，不是面板的夹取范围。`,
-);
+const critHint = `填什么就是什么，只拦负数；暴击倍率全局固定 ${CRIT_MULTIPLIER}×，不写进单招。`;
 
-const critHint = computed(() =>
-  spec.value?.类别 === '变化'
-    ? '变化类无暴击，存 0 表示没有这一项（§6.1 与 schema 注释同口径）。'
-    : `${critBounds('攻击').min}–${critBounds('攻击').max}%，${critBounds('攻击').step} 一档；暴击倍率全局固定 ${CRIT_MULTIPLIER}×，不写进单招。`,
-);
+/** 命中那一栏的提示**改过一次**（2026-09-24 §11.7 落地后）。
+ *
+ * 旧文案写的是「变化招的命中率就是它附加效果的判定率」。那句话在「数值由模型算」的年代无从验证，
+ * 结算收回前端之后它变成了一句明确的假话：`logic/battle.ts` 先按本栏投一次命中，过了才去读附加效果，
+ * 附加效果自带的「NN%」是**第二次独立判定**。也就是说命中 90、效果 30% 的一招，
+ * 实际触发概率是 0.9 × 0.3 ＝ 27%，不是 30%。界面得把这件事说清楚，否则玩家按错的模型调数值。 */
+const hitHint =
+  '填什么就是什么，只拦负数。这一栏管「这一手有没有打中」；附加效果里自带的「NN%」是打中之后的第二次判定，两次都得过才触发。';
+
+/** 附加效果那一栏的提示**也改过一次**，同样是因为 §11.7 让这一栏真的被读了。
+ *
+ * 旧文案举的例子是「令对方陷入「僵住」1 回合」——那个句式 `logic/effect.ts` 读不出来，
+ * 按它写的效果会整条落进「未识别」、一点都不生效。旧文案在「模型照句子自由发挥」的年代没错，
+ * 现在得换成引擎认得的那套语法。回合数也从例子里去掉了：状态持续几回合由 §7.2 的状态表定，
+ * 不在这一栏里填（`data/states.ts` 的 `固定回合`）。 */
+const effectHint =
+  '引擎真的会读这一栏，请按现成十三招的写法来：「30% 给对方「脸在烧」」「自身回生命 20」「自身回精力 15」「自身回满生命」「解除自身状态」，多段用「＋」连。状态名必须是十种里的一个，持续回合由状态表定、这里不填。读不懂的部分会在流水里如实报出来、不生效。';
 
 function setFaction(value: string | number) {
   if (spec.value) {
@@ -408,11 +408,15 @@ function setStage(value: string | number) {
   }
 }
 
-/** 改类别要连带把威力与暴击拉回合法区间，规则在 `logic/skill-table.ts` 的 `applyKind`。
- * 那是**输入时**的边界处理（§5.5 裁决④），不是提交后校验。 */
+/** 改类别**只改类别**，不再连带动威力与暴击。
+ *
+ * 上一版在这里调 `applyKind()`：切到「变化」当场把两项归零、切回「攻击」把 0 抬到下限。
+ * 那是 2026-09-24 裁定要去掉的「变化类只读」的另一半——归零虽然只发生在切换那一下，
+ * 但玩家刚填好的威力 30 会因为改了个类别而消失，同样不是「填什么就是什么」。
+ * §6.1 的形状约束照旧由**生成**技能那一侧负责，面板不替它执行。 */
 function setKind(value: string | number) {
   if (spec.value) {
-    applyKind(spec.value, value as SkillKind);
+    spec.value.类别 = value as SkillKind;
   }
 }
 

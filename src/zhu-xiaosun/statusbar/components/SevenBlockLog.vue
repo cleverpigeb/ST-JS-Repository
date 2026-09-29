@@ -5,76 +5,88 @@
         <i class="fa-solid fa-list-ol" aria-hidden="true"></i>
         本回合流水
       </h4>
-      <button class="sl__reread hud-tap" type="button" title="重新从本层正文里摘一次" @click="emit('reread')">
-        <i class="fa-solid fa-rotate" aria-hidden="true"></i>
-        重读本层
-      </button>
+      <span v-if="sections.length" class="sl__badge">脚本已结算</span>
     </header>
 
-    <p v-if="error" class="sl__error">
-      <i class="fa-solid fa-plug-circle-xmark" aria-hidden="true"></i>
-      取不到本层正文：{{ error }}
-    </p>
+    <div v-if="sections.length" class="sl__body">
+      <section v-for="(section, index) in sections" :key="index" class="sl__block" :class="blockClass(section.head)">
+        <h5 v-if="section.head" class="sl__block-head">
+          <i :class="headIcon(section.head)" aria-hidden="true"></i>
+          {{ section.head }}
+        </h5>
+        <ul class="sl__lines">
+          <li v-for="(line, i) in section.lines" :key="i" class="sl__line">{{ line }}</li>
+        </ul>
+      </section>
+    </div>
 
-    <ol v-else-if="entries.length" class="sl__list">
-      <li v-for="(entry, index) in entries" :key="index" class="sl__item" :class="sideClass(entry)">
-        <span class="sl__kind">
-          <i :class="KIND_ICON[entry.kind]" aria-hidden="true"></i>
-          {{ entry.kind }}
-        </span>
-        <span class="sl__text">{{ entry.text }}</span>
-      </li>
-    </ol>
-
-    <p v-else class="sl__empty">这一层没摘到可读的结算行。数值看上面的对局面板。</p>
+    <p v-else class="sl__empty">还没有出过手，这一场没有可读的结算。点四格菜单里的一招就会有。</p>
 
     <p class="sl__note">
       <i class="fa-regular fa-circle-question" aria-hidden="true"></i>
-      这一栏是从本层正文里<b>尽力摘取</b>的复读，不参与任何结算；摘漏了不影响生命、精力与状态。
+      这一栏是<b>本回合的权威结算</b>：面板在你点下那一手时就把整个回合算完了，同一份文本也一并发给了她。
+      正文里的数字若与这里不符，以这里为准。
     </p>
   </section>
 </template>
 
 <script setup lang="ts">
-import type { LogEntry, LogKind } from '../logic/battle-log';
+import { splitLedger } from '../logic/battle';
+import { useDataStore } from '../store';
 
-/** 七块输出的复读栏（design-spec §5.8 组件树：SevenBlockLog ← §11 七块输出，按先攻顺序）。
+/** 七块输出的流水栏（design-spec §5.8 组件树：SevenBlockLog ← §11 七块输出，按先攻顺序）。
  *
- * **顺序不需要本组件排**：`世界书/阶段指导/决斗回合指导.txt` 写明「排列顺序跟随先攻，本回合 1D20
- * 点数高的那一方排在前面」，所以正文里的先后就是先攻顺序，按原序列出即可。
+ * **这个组件换过一次数据来源，方向是反的**（2026-09-24 §11.7 裁定）。
+ * 第一版从本层正文里正则摘取模型报的数（`logic/battle-log.ts` 的 `extractLog`），
+ * 注释里写着「尽力摘取的复读，不参与任何结算」。那一版的前提是「数值由模型算」——
+ * 而实测第五条「战斗实际上并没有发生」证明这条路走不通：模型既不知道先攻、也不知道她选了什么招，
+ * 于是什么都没算，正文里压根没有可摘的行。
  *
- * 本组件是纯呈现件：正文的读取与摘取都在 BattlePanel，一层只读一次、两个消费者共用一份结果
- * （CommandBar 还要用它判「讲不出话」封的是哪一招）。`重读本层` 只把事件抛上去——
- * 没有挂任何宿主事件名，因为能确证的事件名一个都没验过，**不猜**。
+ * §11.7 把结算收回前端之后，权威流水就在 `决斗.$本回合流水` 里，本组件直读它。
+ * 于是：
+ *   · 「重读本层」按钮撤掉——没有可重读的对象，流水不在正文里。
+ *   · 「尽力摘取」那句免责撤掉，换成反向的一句：**正文与这里不符时以这里为准**。
+ *     这不是自夸，是必须说的话：模型照抄时抄错一个数，玩家得知道该信哪边。
+ *   · `error` 入参撤掉——读 MVU 不会失败，失败的是宿主取数，而这一层已经不取正文了。
  *
- * 末尾那句「尽力摘取」是必须留的：摘取会漏、也会误收，界面不得让人误以为这是权威流水。 */
-const props = defineProps<{ entries: readonly LogEntry[]; error?: string }>();
-const emit = defineEmits<{ reread: [] }>();
+ * **顺序仍然不需要本组件排**：段头是 `logic/battle.ts` 按先攻顺序写下来的
+ *（`【先攻】`→`【先手·某某】`→`【后手·某某】`→`【回合结束】`），按原序列出即是 §11.1 的块序。
+ * 第 2、4、6 块是模型写的正文，不在流水里，所以这一栏只有三到四块。 */
+const store = useDataStore();
 
-const entries = computed(() => props.entries);
-const error = computed(() => props.error ?? '');
+const sections = computed(() => splitLedger(store.data.决斗.$本回合流水));
 
-const KIND_ICON: Record<LogKind, string> = {
-  先攻: 'fa-solid fa-dice-d20',
-  行动: 'fa-solid fa-hand-fist',
-  状态: 'fa-solid fa-circle-exclamation',
-  命中: 'fa-solid fa-bullseye',
-  例外: 'fa-solid fa-triangle-exclamation',
-  回合结束: 'fa-solid fa-flag-checkered',
-};
-
-/** 归属摘不出来时不上色，不拿「大概是谁」糊过去。 */
-function sideClass(entry: LogEntry): string {
-  if (entry.side === '朱小笋') {
-    return 'sl__item--her';
+/** 段头配图标。段头里带名字（`先手·朱小笋`），所以按前缀认，不做全等匹配。 */
+function headIcon(head: string): string {
+  if (head === '先攻') {
+    return 'fa-solid fa-dice-d20';
   }
-  return entry.side === '主角' ? 'sl__item--you' : '';
+  if (head === '回合结束') {
+    return 'fa-solid fa-flag-checkered';
+  }
+  if (head === '本场结束') {
+    return 'fa-solid fa-trophy';
+  }
+  return 'fa-solid fa-hand-fist';
+}
+
+/** 行动块按出手方上色，与对局面板两侧同一套色。判不出归属的块不上色，不拿「大概是谁」糊过去。 */
+function blockClass(head: string): string {
+  if (head.endsWith('朱小笋')) {
+    return 'sl__block--her';
+  }
+  if (head.endsWith('主角')) {
+    return 'sl__block--you';
+  }
+  return '';
 }
 </script>
 
 <style lang="scss" scoped>
+/* 这一栏现在住在下半屏的消息框里（§11.8），不再是面板上另起的一栏，所以外框由消息框给，
+   本组件只留一点与上方旁白的间距。 */
 .sl {
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .sl__head {
@@ -94,81 +106,68 @@ function sideClass(entry: LogEntry): string {
   }
 }
 
-.sl__reread {
-  border: 1px solid var(--hud-border);
-  background: transparent;
-  color: var(--hud-mute);
-  border-radius: 2px;
-  padding: 0 6px;
-  font: inherit;
+/* 「脚本已结算」是一枚事实标签，不是按钮：玩家得看出这些数不是模型编的 */
+.sl__badge {
+  flex: 0 0 auto;
   font-size: 11px;
-  cursor: pointer;
-
-  &:hover {
-    border-color: var(--theme-primary);
-    color: var(--theme-accent);
-  }
-
-  i {
-    margin-right: 3px;
-  }
+  color: var(--theme-accent);
+  border: 1px solid currentcolor;
+  border-radius: 2px;
+  padding: 0 5px;
+  line-height: 1.5;
 }
 
-.sl__list {
+/* 三到四块加上双方的行，长回合能到十几行。消息框与右侧四格菜单是并排的，
+   所以这里封一个上限让它自己滚——不封的话消息框会把菜单拉到屏外，那时玩家得先滚过整份流水才能出手。
+   `44vh` 而不是固定 px：楼层高度随宿主窗口变，固定值在矮屏上一样会顶出去。 */
+.sl__body {
   margin-top: 4px;
-  list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  max-height: 44vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
-.sl__item {
-  display: flex;
-  gap: 6px;
-  align-items: baseline;
-  padding: 2px 6px;
-  font-size: 12px;
-  line-height: 1.5;
-  border-left: 2px solid transparent;
+.sl__block {
+  padding: 3px 6px;
   background: var(--hud-bg-2);
+  border-left: 2px solid transparent;
 }
 
-.sl__item--her {
+.sl__block--her {
   border-left-color: var(--theme-primary);
 }
 
-.sl__item--you {
+.sl__block--you {
   border-left-color: var(--hud-mute);
 }
 
-.sl__kind {
-  flex: 0 0 auto;
+.sl__block-head {
   font-size: 11px;
+  font-weight: 700;
   color: var(--hud-mute);
-  white-space: nowrap;
 
   i {
     margin-right: 3px;
   }
 }
 
-.sl__text {
+.sl__lines {
+  list-style: none;
+}
+
+.sl__line {
+  font-size: 12px;
+  line-height: 1.55;
   word-break: break-word;
 }
 
-.sl__empty,
-.sl__error {
+.sl__empty {
   margin-top: 4px;
   font-size: 12px;
   color: var(--hud-mute);
-}
-
-.sl__error {
-  color: var(--c-danger);
-
-  i {
-    margin-right: 3px;
-  }
 }
 
 .sl__note {
@@ -182,7 +181,7 @@ function sideClass(entry: LogEntry): string {
   }
 
   b {
-    color: var(--c-warning);
+    color: var(--theme-accent);
   }
 }
 </style>

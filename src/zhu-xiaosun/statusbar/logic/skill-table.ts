@@ -9,7 +9,7 @@ import type { Stage } from '../data/stages';
  * 现在两边同源：本模块读它渲染面板，`战斗叙事对照表` 用 EJS 从同一个变量渲染正文。
  *
  * **所有函数都把表当参数收**，不在这里抓 store：技能页编辑态要拿**草稿**里的表渲染，
- * 而 `logic/battle-log.ts` 明文「纯函数，不碰宿主 API」。谁持有表谁传进来。
+ * 而 `logic/battle.ts` 明文「纯函数、不碰宿主 API、不抓 store」。谁持有表谁传进来。
  */
 
 export type SkillTable = Schema['$技能表'];
@@ -28,9 +28,11 @@ export function lookupSkill(table: SkillTable, id: string): SkillSpec | null {
 
 /** 按招名反查归属。
  *
- * 用途是 `logic/battle-log.ts` 从本层正文摘「某某使出〈技能名〉」时判断这一招是谁出的——
- * 正文里 `<user>` 的名字面板并不知道，按招名查表比在句子里认人名可靠。
- * 从前这靠「两方招表互不相交」这条巧合，现在直接读 `阵营` 字段，表被改过也不会错判。
+ * **现在没有调用方**（2026-09-24 §11.7）：它原本给 `logic/battle-log.ts` 从本层正文摘
+ * 「某某使出〈技能名〉」时判断这一招是谁出的用——正文里 `<user>` 的名字面板并不知道，
+ * 按招名查表比在句子里认人名可靠。结算收回前端之后流水是脚本自己写的，出手方直接写在句子里，
+ * 不需要反查。函数留着不删是因为「按招名问归属」是这张表的基本读法，删掉等于把这个问题
+ * 交给每个调用点各自 `table[id].阵营` 一遍；但**它现在确实没人用**，别当成还在服役的路径去理解。
  * 表外的招返回 `未知`，由组件如实显示而不是随便归给一方。 */
 export function skillOwner(table: SkillTable, id: string): Faction | '未知' {
   return lookupSkill(table, id)?.阵营 ?? '未知';
@@ -63,45 +65,29 @@ export function herSkillSet(table: SkillTable, highest: Stage): { skills: string
       };
 }
 
-/** 面板编辑时的维度边界（草案 §6.1 字段表逐字）。
+/** 面板编辑九个字段时的数值边界——**只剩一条下限 0，没有上限、没有档位步长**。
  *
- * 这些边界**只在前端生效**：schema 侧 `$技能表` 的注释明文「只保形状不夹范围」，
- * 与 §11.4「夹取是前端提交时的职责」同口径。夹取的**时机**按 §5.5 裁决④在**输入时**做，
- * 由 `EditableField` 的上界 @input／下界 @change 两段完成，这里只提供数字。
+ * 裁定原文（`亲密决斗-规则草案.md:274`，2026-09-24 用户于 B-G10 实测后）：
+ * 「面板对技能九个字段一律不夹取，玩家填什么就是什么。……去掉全部上限、去掉 5 一档的步长、
+ *   去掉变化类的只读，只保留下限 0。」
  *
- * 威力**刻意不给上限**：§6.1 只写了「攻击类 ≥ 10」。§6.2 的 100 分预算是**生成**技能时的
- * 规则，不是面板的夹取范围；按预算反推一个 33 之类的天花板属于自己发明规则，而且
- * 面板的定位是「模型漏更新变量时的手动兜底」，兜底优先于结算约束力（§11.4）。 */
-export const HIT_BOUNDS = { min: 50, max: 100, step: 5 } as const;
-export const EP_BOUNDS = { min: 0, max: 25, step: 5 } as const;
-
-/** 威力：攻击类 ≥ 10、无上限；变化类固定 0（§6.1），于是 min = max = 0 把它钉死。 */
-export function powerBounds(kind: SkillKind): { min: number; max: number | undefined; step: number } {
-  return kind === '攻击' ? { min: 10, max: undefined, step: 1 } : { min: 0, max: 0, step: 1 };
-}
-
-/** 暴击：攻击类 5–25、5 一档；变化类无暴击，写 0 表示没有这一项（§6.1 与 schema 注释同口径）。 */
-export function critBounds(kind: SkillKind): { min: number; max: number; step: number } {
-  return kind === '攻击' ? { min: 5, max: 25, step: 5 } : { min: 0, max: 0, step: 5 };
-}
-
-/** 改「类别」时把两个随类别变的字段就地拉回合法区间。
+ * **上一版错在哪**：§6.1 的字段表（命中 50–100、精力 0–25、暴击 5–25 且 5 一档）被本模块当成了
+ * **输入夹取范围**，于是命中填 33 会在失焦时被抬回 50、精力填 40 会在敲键时被压回 25，
+ * 变化类的威力与暴击更是直接只读。用户实测第一条「技能数值**还是**无法任意修改」说的就是这个——
+ * 「还是」二字指向 2026-09-14 那次改判只做对了一半：表体确实落进了 `$技能表`、编辑态确实碰得到，
+ * 但碰到的每一个数都会被拉回去。
  *
- * 这仍是**输入时**的边界处理（§5.5 裁决④），不是提交后校验：切到变化类要当场把
- * 威力与暴击归零（§6.1「变化类威力固定 0」「变化类无暴击」），切回攻击类则把 0 抬到各自下限，
- * 否则草稿里会留下「攻击类威力 0」这种 §6.2 硬约束不允许的形状。
+ * **这不是放弃 §6.1／§6.2**（草案 line 278）：那两节管的是**生成**技能时的合法性，
+ * 管出厂与剧情解锁时该给出什么招；而面板的定位是 §11.4 拍板的「模型漏更新变量时的手动兜底，
+ * 兜底优先于结算约束力」。把生成规则当成编辑闸，等于让兜底手段先通过一次出厂审核。
+ * 结算照旧读表里的数，**脚本不因为一个数越界就拒绝结算**。
  *
- * 直接改传进来的对象：调用方给的是本页草稿，不是 `store.data`。 */
-export function applyKind(spec: SkillSpec, kind: SkillKind): void {
-  spec.类别 = kind;
-  if (kind === '变化') {
-    spec.威力 = 0;
-    spec.暴击 = 0;
-    return;
-  }
-  spec.威力 = Math.max(spec.威力, powerBounds('攻击').min);
-  spec.暴击 = _.clamp(spec.暴击, critBounds('攻击').min, critBounds('攻击').max);
-}
+ * **下限 0 是一处读法，用户一句话即可推翻**（草案 line 276）：负数在结算里没有定义——
+ * 负威力等于给对方回血、负精力消耗等于出手回精力，而这两件事都由「附加效果」承担、不走这两个字段。
+ *
+ * `step: 1` 不是一个新闸，它只管数字输入框上下箭头一次跳多少；键盘照样能输任意整数。
+ * `max: undefined` 传给 `EditableField` 后那一侧的上界夹取整段跳过（见该组件的 `onNumberInput`）。 */
+export const SKILL_BOUNDS = { min: 0, max: undefined, step: 1 } as const;
 
 /** 一招的单行摘要，供「改哪一招」下拉与列表分组用。 */
 export function skillBrief(spec: SkillSpec): string {

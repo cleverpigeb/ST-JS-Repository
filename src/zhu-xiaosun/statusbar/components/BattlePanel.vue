@@ -91,6 +91,24 @@
           :hint="isQualitative ? '质变决斗中该字段无作用对象，恒 ×1.0' : '偏差四档（草案 §10.1）；只乘她的生命上限'"
           @update:model-value="value => (draft.倍率 = Number(value))"
         />
+        <!-- 本场请愿：§12.4 逐字「面板可编——请愿措辞写错了要能改」。
+             质变决斗里恒为空串（那条路没有请愿），所以那时只读、并把「为什么是空的」写在字面上。 -->
+        <EditableField
+          label="本场请愿"
+          icon="fa-solid fa-hand-holding-heart"
+          type="textarea"
+          :editing="!isQualitative"
+          :readonly="isQualitative"
+          :model-value="isQualitative ? '' : draft.请愿"
+          :display-as="isQualitative ? '—（质变决斗没有请愿）' : ''"
+          placeholder="她赢了要你做的那件事"
+          :hint="
+            isQualitative
+              ? '质变决斗不是为某件事打的，这一栏恒空'
+              : '赢的一方兑现的就是这一句；改它不影响已经算过的回合'
+          "
+          @update:model-value="value => (draft.请愿 = String(value))"
+        />
         <p v-if="isQualitative" class="bp__note">
           本场是质变决斗，不做偏差修正，这一档锁在 ×1.0（草案 §10.1 第六轮限定）。
         </p>
@@ -111,17 +129,8 @@
         {{ verdict.text }}
       </p>
 
-      <!-- 主角背面剪影：§5.8 立绘占位明写「在**战斗态对局面板下方**」。
-           指令区里那张小头像是同一个组件、同一个 CSS 变量，于是 §11.3 的
-           「主角头像＝与左下背影同一形象」自动成立，不需要两套素材。 -->
-      <PortraitFrame class="bp__silhouette" who="you" alt="你的背影" caption="你，背对着看不见的那一侧" />
-
-      <ErrorBoundary label="本回合流水">
-        <SevenBlockLog :entries="log" :error="logError" @reread="readLog" />
-      </ErrorBoundary>
-
       <ErrorBoundary label="行动选择">
-        <CommandBar :entries="log" @edit="startEditing" />
+        <CommandBar @edit="startEditing" />
       </ErrorBoundary>
     </template>
   </section>
@@ -130,7 +139,6 @@
 <script setup lang="ts">
 import { MULTIPLIER_TIERS } from '../data/stages';
 import { resetRounds, STATE_OPTIONS, type StateName } from '../data/states';
-import { extractLog, type LogEntry } from '../logic/battle-log';
 import { herEpCap, herHpCap, sideStatePatch, youEpCap, youHpCap } from '../logic/duel';
 import { lastVerdict } from '../logic/duel-tier';
 import { startEditing, useEditMode } from '../logic/edit-mode';
@@ -140,43 +148,23 @@ import CommandBar from './CommandBar.vue';
 import DuelHud from './DuelHud.vue';
 import EditableField from './EditableField.vue';
 import ErrorBoundary from './ErrorBoundary.vue';
-import PortraitFrame from './PortraitFrame.vue';
-import SevenBlockLog from './SevenBlockLog.vue';
 import StateChip from './StateChip.vue';
 
 /** 战斗态整块（design-spec §5.8：战斗态是独立布局，不是常态多一页）。
  *
- * 版面自上而下 ＝ 对局面板 → 主角背影 → 本回合流水 → 行动选择，
- * 与 §5.8 组件树（DuelHud／SevenBlockLog／CommandBar）和立绘两个位的落位一致。
+ * 版面自上而下 ＝ **对战画面（上半屏）→ 判档说明 → 下半屏**，其中下半屏整块交给 `CommandBar`
+ *（2026-09-24 §11.8 裁定）。§5.8 组件树那三个名字都还在，只是层级变了：
+ * `SevenBlockLog` 不再由本组件平铺，它是下半屏消息框里的内容，挂在 `CommandBar` 里面。
+ * 主角背影同理搬进了 `DuelHud` 的左下角——§5.8 那句「在战斗态对局面板下方」是第一版的落位，
+ * §11.8 的表把它改到了画面之内，所以这里不再另挂一张；§11.3 的「主角头像＝与左下背影同一形象」
+ * 仍然成立，而且比从前更强：现在**只有一张**。
  *
- * **本层正文只读一次**：读取与摘取都放在这里，`log` 同时喂给 SevenBlockLog（显示）
- * 与 CommandBar（判「讲不出话」封的是哪一招）。放到两个子组件各读一遍会读两次、
- * 还可能因为摘取时机不同得出两份不一致的结果。 */
+ * **本组件不再读本层正文**（2026-09-24 §11.7 裁定）。上一版在这里 `getChatMessages` 取正文、
+ * 用 `extractLog()` 正则摘模型报的数，再把结果同时喂给 SevenBlockLog（显示）与 CommandBar
+ *（判「讲不出话」封的是哪一招）。结算收回前端之后那条路整条退役：权威流水在 `决斗.$本回合流水` 里，
+ * 两个子组件各自直读 store 即可——同一份 MVU 字段，不存在「读两次得出两份不一致结果」的问题，
+ * 那正是上一版必须集中读一次的理由。 */
 const store = useDataStore();
-
-const log = ref<LogEntry[]>([]);
-const logError = ref('');
-
-/** 取本层正文再摘流水。
- *
- * `getChatMessages` 是同步函数（`@types/function/chat_message.d.ts`），所以 setup 里直接调；
- * 用的是 tavern-ui 明许的第二条取数路径「消息原文：`getChatMessages(getCurrentMessageId())[0]`
- * 再在代码里 `.match()` 分析」，没有动任何正则。
- *
- * 失败原样抛给 SevenBlockLog 显示，不 fallback 成空数组假装读到了——摘不到和读不到
- * 对玩家是两件事：前者是本层没有结算行，后者是宿主接口没给东西。 */
-function readLog() {
-  try {
-    const message = getChatMessages(getCurrentMessageId())[0]?.message ?? '';
-    log.value = extractLog(message, store.data.$技能表);
-    logError.value = '';
-  } catch (error) {
-    log.value = [];
-    logError.value = error instanceof Error ? error.message : String(error);
-  }
-}
-
-readLog();
 
 /** 草稿层：不直绑 `store.data`，理由见 `EditableField.vue` 注释（deep watch 会逐字符回写 MVU）。 */
 const draft = reactive({
@@ -187,6 +175,7 @@ const draft = reactive({
   主角精力: 0,
   主角状态: '无' as StateName,
   倍率: 1.0,
+  请愿: '',
 });
 
 const isQualitative = computed(() => store.data.决斗.$本场为质变决斗);
@@ -239,6 +228,7 @@ function start() {
   draft.主角精力 = duel.$主角精力;
   draft.主角状态 = duel.$主角状态;
   draft.倍率 = duel.$生命上限修正倍率;
+  draft.请愿 = duel.$本场请愿;
 }
 
 /** 提交。夹取在输入时已由 `EditableField` 做过一遍，这里再夹一次是收口：
@@ -263,7 +253,11 @@ function submit() {
       $主角状态: you.状态,
       $主角状态剩余回合: you.剩余回合,
       $生命上限修正倍率: multiplier,
-      // `$回合数` 不写：只读，由脚本推进。
+      // 请愿先 `trim()` 再落库：下游（`决斗回合指导.txt` 的 `|| '…'` 兜底、以及自动推断那条路）
+      // 一律按「空串＝没有请愿」判，全是空格的一句在那些判断里会假装自己有内容。
+      $本场请愿: isQualitative.value ? '' : draft.请愿.trim(),
+      // `$回合数` 与 `$本回合流水` 都不写：这两个是本组唯一的两个不可编字段，
+      // 面板连编辑控件都不给（§12.4）。它们靠上面那一行 `...store.data.决斗` 原样留存。
     },
   });
 }
@@ -280,13 +274,7 @@ const editing = useEditMode({
 </script>
 
 <style lang="scss" scoped>
-.bp__silhouette {
-  margin: 8px auto 0;
-  width: 38%;
-  max-width: 120px;
-}
-
-/* 判档结果贴着对局面板走：它解释的就是上面那条血条的分母 */
+/* 判档结果贴着对战画面走：它解释的就是画面里那条血条的分母 */
 .bp__tier {
   margin-top: 6px;
   font-size: 11px;

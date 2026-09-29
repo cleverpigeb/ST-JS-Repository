@@ -1,5 +1,5 @@
 <template>
-  <div class="sb" :class="[`sb--${tone}`, { 'sb--low': isLow }]">
+  <div class="sb" :class="[`sb--${tone}`, { 'sb--warn': isWarn, 'sb--low': isLow }]">
     <div class="sb__head">
       <span class="sb__label">
         <i v-if="icon" :class="icon" aria-hidden="true"></i>
@@ -36,9 +36,16 @@ const props = withDefaults(
     tone?: 'life' | 'energy' | 'affection';
     /** 低位阈值（占上限的比例），到此比例及以下条色转 --c-danger；传 0 关闭。 */
     lowAt?: number;
+    /** 中位阈值（占上限的比例），到此比例及以下条色转 --c-warning；**默认 0 ＝ 关闭**。
+     *
+     * 在于 §11.8 那句「生命数值 + 血条（**颜色随比例变**）」：经典 2D 对战界面的血条是三段色，
+     * 只有满／危两段看不出「快撑不住了」这一档。开着它的只有战斗态那两条血条
+     *（`DuelInfoBox` 传 0.5），常态面板的好感度与上限条一律不开——那些条不是倒计时，
+     * 半满染成警示色只会制造焦虑。低位那一档写在后面，所以两条都成立时危险色优先。 */
+    warnAt?: number;
     hint?: string;
   }>(),
-  { icon: '', tone: 'life', lowAt: 0.25, hint: '' },
+  { icon: '', tone: 'life', lowAt: 0.25, warnAt: 0, hint: '' },
 );
 
 const shown = computed(() => Math.round(props.value));
@@ -46,10 +53,11 @@ const shown = computed(() => Math.round(props.value));
 const ratio = computed(() => (props.max > 0 ? _.clamp(props.value / props.max, 0, 1) : 0));
 const percent = computed(() => `${(ratio.value * 100).toFixed(1)}%`);
 const isLow = computed(() => props.lowAt > 0 && props.max > 0 && ratio.value <= props.lowAt);
+const isWarn = computed(() => props.warnAt > 0 && props.max > 0 && ratio.value <= props.warnAt);
 </script>
 
 <style lang="scss" scoped>
-/* 语义取色。--sb-color 由下面四条改写，.sb--low 写在最后所以低位优先。 */
+/* 语义取色。--sb-color 由下面几条改写，顺序即优先级：中位在低位之前，所以两条都成立时取危险色。 */
 .sb--life {
   --sb-color: var(--theme-primary);
 }
@@ -58,6 +66,9 @@ const isLow = computed(() => props.lowAt > 0 && props.max > 0 && ratio.value <= 
 }
 .sb--affection {
   --sb-color: var(--c-affection);
+}
+.sb--warn {
+  --sb-color: var(--c-warning);
 }
 .sb--low {
   --sb-color: var(--c-danger);
