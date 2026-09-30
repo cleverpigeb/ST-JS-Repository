@@ -407,6 +407,14 @@
         "$本场朱小笋已用道具": {
           "default": false,
           "type": "boolean"
+        },
+        "$本场请愿": {
+          "default": "",
+          "type": "string"
+        },
+        "$本回合流水": {
+          "default": "",
+          "type": "string"
         }
       }
     }
