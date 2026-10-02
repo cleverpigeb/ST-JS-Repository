@@ -175,9 +175,13 @@ export async function judgeTier(data: Schema): Promise<TierVerdict> {
       json_schema: TIER_SCHEMA,
     });
 
-    // 传了 json_schema 就不会走 tool_calls 那条分支，但返回类型是联合类型，这里照样收一手。
-    const text = typeof reply === 'string' ? reply : reply.content;
-    const parsed = parseTier(text);
+    // 传了 json_schema 就不会走 tool_calls 那条分支，所以这里直接当字符串吃。
+    // 2026-10-02 改：原先写的是一手「联合类型照样收」的 `typeof reply === 'string' ? reply : reply.content`，
+    // 但这种不带 `should_return_reasoning`、不带 `tools` 的调用，按 `@types/function/generate.d.ts:212-218`
+    // 的三重载已经收窄成 `Promise<string>`，else 分支恒为 `never`、`reply.content` 也就成了 TS2339。
+    // 报错源自 bot 提交 e713c5e 改了那份 `@types`，与本卡实现无关；这一行只是把旧写法跟上去。
+    // 不改成 `reply as GenerateToolCallResult`：那既要在运行期多担一个不存在的形状，也把错误盖住而不是解决。
+    const parsed = parseTier(reply);
     if (parsed) {
       return verdict(parsed.tier, parsed.source, '');
     }

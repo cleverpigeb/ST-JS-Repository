@@ -19,6 +19,20 @@
           {{ sendError }}
         </p>
 
+        <!-- 触发没落地时的补发口（2026-10-02 实测第四批）。**只重发触发、不重算回合**：
+             §11.7 一要求一层只结算一次，而这一层已经算完、也已经写进那条用户消息了，
+             缺的只是把生成踢起来。重算一个回合才是真正的数据污染。 -->
+        <template v-if="undelivered">
+          <p class="cb__note cb__note--err">
+            <i class="fa-solid fa-paper-plane" aria-hidden="true"></i>
+            这一手算完了、也进了聊天，但酒馆没有接下这次生成（多半是上一拍还在收尾）。她不会自己回应，点下面补发一次。
+          </p>
+          <button class="cb__btn cb__btn--primary hud-tap" type="button" :disabled="sending" @click="redeliver">
+            <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+            {{ sending ? '补发中……' : '补发这一拍（不重算回合）' }}
+          </button>
+        </template>
+
         <!-- 心里话：§11.3 明文「常态状态栏被替代后，心里话入口必须保留在这里」，
              默认虚化也是那一条定的。它占掉消息框的正文位，所以与流水二选一。 -->
         <div v-if="menu === '心里话'" class="cb__inner">
@@ -191,6 +205,7 @@ import { EQUIP_SLOTS } from '../data/skills';
 import { BAG_SLOTS, type BagSlot } from '../logic/bag';
 import { ledgerLastSkill, resolveTurn, type Move } from '../logic/battle';
 import { closeDuel } from '../logic/duel';
+import { useGenerationGate, waitForTurnStart, yieldToGeneration } from '../logic/generation';
 import { lookupSkill } from '../logic/skill-table';
 import { useDataStore } from '../store';
 import ErrorBoundary from './ErrorBoundary.vue';
@@ -245,6 +260,25 @@ const pending = ref<{ label: string; move: Move } | null>(null);
  * 用一个本地 latch 而不是去轮询 `getLastMessageId()`：轮询要么等不够、要么把出手卡住。 */
 const spent = ref(false);
 
+/** 结算已落库、用户楼层也已建出来，但**那次触发没有落地**，她不会自己回应（2026-10-02 实测第四批）。
+ *
+ * 与 `spent` 并存而不是替代它：`spent` 答的是「这一层还能不能再出一手」——不能，§11.7 一
+ * 要求一层只结算一次，消息一进聊天这一层就作废了，所以 `spent` 照旧在建完消息那一刻 latch。
+ * 本标志答的是另一个问题：「发出去的这一手有没有被接住」。两件事混成一个开关就会得到上一版
+ * 那种结果——面板一边作废菜单、一边谎称「等她的回应」。 */
+const undelivered = ref(false);
+
+/** 发送的阶段，只用来把 `sayText` 那一句说准。空串 ＝ 不在发送中。 */
+const sendPhase = ref<'' | '让路' | '发送' | '对账'>('');
+
+/** 这一手建出来的那条用户楼层的 id；−1 ＝ 本层还没发过。
+ * 只给「补发」用：按下补发之前拿它核一次聊天有没有在对账窗口关掉之后才长出回复。 */
+const sentFloorId = ref(-1);
+
+/** 生成态闸（`logic/generation.ts`）。调用点同时完成那个模块的惰性装载，
+ * 所以这一句即使眼下没有别的读者也不能删。 */
+const generating = useGenerationGate();
+
 /** 挂载那一刻本层是不是最新层。**只用来决定要不要摆出菜单**，不当闸门——
  * 真正的闸门在 `send()` 里，每次点击现取一次。
  *
@@ -277,7 +311,17 @@ const sayText = computed(() => {
     return `确认这一手：${pending.value.label}？点「确认」这一回合立刻算完，然后连同结果一起发给她。`;
   }
   if (sending.value) {
+    if (sendPhase.value === '让路') {
+      return '她上一拍还在收尾，等它让开就发……';
+    }
+    if (sendPhase.value === '对账') {
+      return '发出去了，正在确认她接住了没有……';
+    }
     return '这一手正在发出去……';
+  }
+  // 这一条必须排在 `spent` 前面：触发没落地时两个标志同时为真，而该说的是没接住那一句。
+  if (undelivered.value) {
+    return '这一手算完了，但没能把她叫起来回应。看下面。';
   }
   if (spent.value) {
     return '这一手已经发出去了，上面就是它算出来的结果。等她的回应。';
@@ -303,6 +347,9 @@ const sayIcon = computed(() => {
   }
   if (pending.value) {
     return 'fa-regular fa-circle-question';
+  }
+  if (undelivered.value) {
+    return 'fa-solid fa-plug-circle-exclamation';
   }
   if (sending.value || spent.value) {
     return 'fa-solid fa-hourglass-half';
@@ -339,6 +386,11 @@ const lockNote = computed(() => {
   }
   if (d.value.$主角状态 === '腿软') {
     return '你正「腿软」：按钮照常可点，每回合三成概率动不了，结算时才判。';
+  }
+  // 预告而不是拦截：菜单照常可点，点下去会先等这一拍收尾（`send()` 的「让路」那一步）。
+  // 说在前面是因为那一等最长 20 秒，不说玩家会以为点坏了。
+  if (generating.value) {
+    return '她正在说话。这一手照常可点，点下去会先等她说完再发出去。';
   }
   return '';
 });
@@ -431,7 +483,24 @@ function ask(label: string, move: Move) {
  * **仍有一段如实记下的残余竞态**：`updateVariablesWith` 在那个 watcher 回调里是发射即忘的，
  * `nextTick()` 只保证回调被调用、不保证宿主那一侧写完。真撞上了后果是可控的——模型需要的事实
  * 全都在这条用户消息的正文里（这正是 §11.7 要求「一并写进用户消息」的理由之一），
- * 而面板每 2 秒的反向同步会把 MVU 重新读回来。**不加轮询去等它**：轮询要么等不够、要么把出手卡住。 */
+ * 而面板每 2 秒的反向同步会把 MVU 重新读回来。**不加轮询去等它**：轮询要么等不够、要么把出手卡住。
+ *
+ * **2026-10-02 实测第四批补了两步（本项目第三十四处）**。用户逐字：「在战斗面板点击技能并发送后，
+ * 酒馆弹出提示『无法在生成回复时使用 /trigger 命令』；并且本次回复虽然正常生成，但没能正常发送」。
+ * 上一版的 `await triggerSlash('/trigger')` 只等 slash 管道——`/trigger` 的 `await` 命名参数
+ * **默认是 `false`**（`slash_command.txt:262`）——而酒馆挡掉触发时只弹 toastr 不抛错，
+ * 于是 `catch` 不进、面板照说「已经发出去了」。补的两步是：
+ *   一、**让路排在结算之前**（`yieldToGeneration()`）。排在前面是因为 §11.7 一要求结算发生在
+ *       出手那一刻，而先结算再发现发不出去正是本函数 `catch` 里写的那种最难受的失败：
+ *       回合数与血量都动了、正文一个字没推进。让路超时那条路上面板一个数都不动。
+ *   二、**对账排在触发之后**（`waitForTurnStart()`），没起跑就点亮 `undelivered`、
+ *       给出只补发触发不重算回合的入口。依据是 `C5_同层前端.md:404`：「不要仅依赖 `triggerSlash`
+ *       Promise 的返回时机解除 busy；以生成结束/停止事件和真实消息重读为准，并准备事件漏收后的超时对账。」
+ *
+ * **`spent` 的 latch 位置没有改，这是有意的。** 它答的是「这一层还能不能再出一手」——不能，
+ * 消息一进聊天这一层就作废（§11.7 一：一层只结算一次）。把它挪到对账之后会让菜单在触发失败时
+ * 重新摆出来，玩家再点一次就结算了第二个回合，那才是真正的数据污染。
+ * 「触发有没有落地」是另一个问题，由 `undelivered` 单独答。 */
 async function send() {
   const action = pending.value;
   if (!action || sending.value) {
@@ -444,6 +513,13 @@ async function send() {
       sendError.value = '这是旧楼层的面板，不能从这里出手。回到最新一层再点。';
       return;
     }
+    sendPhase.value = '让路';
+    if ((await yieldToGeneration()) === 'timeout') {
+      sendError.value =
+        '她那一拍一直没收尾，这一手没有发出去——面板上的数一个都没动，选的招也还留着。等她停下（或按酒馆的停止键）再点一次「确认」。';
+      return;
+    }
+    sendPhase.value = '发送';
     const outcome = resolveTurn(store.data, action.move);
     Object.assign(store.data, outcome.patch);
     pending.value = null;
@@ -453,14 +529,72 @@ async function send() {
     ]);
     // latch 放在触发生成之前：消息已经进聊天了，这一层就已经作废，不该再摆出菜单。
     spent.value = true;
-    await triggerSlash('/trigger');
+    await deliver();
   } catch (error) {
     // 如实回显失败原因，不静默吞掉：吞掉的话玩家会以为发出去了，然后重复点。
     // **结算已经落库、消息没发出去**是这里最难受的一种失败：回合数与血量都动了，正文却没推进。
     // 不做回滚——回滚要撤的是一次已经被反向同步撞见的写入，撤不干净反而更乱。把话说清楚让玩家自己决定。
-    sendError.value = `没发出去：${error instanceof Error ? error.message : String(error)}。上面的流水已经算进面板了，要么再点一次「确认」把这一手补发出去（会重算一个回合），要么进「战斗内编辑」把数字改回去。`;
+    const why = error instanceof Error ? error.message : String(error);
+    if (spent.value) {
+      // 消息已经进聊天了，缺的只是触发：走补发口。**不要**让玩家再点「确认」——那会重算一个回合。
+      undelivered.value = true;
+      sendError.value = `触发这一拍时出错：${why}。这一手本身已经算完、也已经进了聊天，用下面的「补发」把生成踢起来就行。`;
+    } else {
+      sendError.value = `没发出去：${why}。上面的流水已经算进面板了，要么再点一次「确认」把这一手补发出去（会重算一个回合），要么进「战斗内编辑」把数字改回去。`;
+    }
   } finally {
     sending.value = false;
+    sendPhase.value = '';
+  }
+}
+
+/** 把这一拍交给酒馆，并对账确认它真的起跑了。
+ *
+ * 对账基线**现取**：此刻聊天的最后一层就是刚建出来的那条用户楼层。
+ * 不能用建消息之前的那个 id——它比当前楼层小 1，`waitForTurnStart` 一进去就会看到「越过了」，
+ * 立刻误报起跑，对账等于没做。 */
+async function deliver() {
+  undelivered.value = false;
+  const floorId = getLastMessageId();
+  sentFloorId.value = floorId;
+  await triggerSlash('/trigger');
+  sendPhase.value = '对账';
+  if ((await waitForTurnStart(floorId)) === 'timeout') {
+    undelivered.value = true;
+  }
+}
+
+/** 界面上那颗「补发这一拍」：**只重发触发，不重算回合**。
+ *
+ * 一上来先核一次楼层：对账窗口关掉之后她的回应才姗姗来迟是完全可能的，那种情况下补发会在
+ * 已有回复之上再踢一次生成。这一道核对是 `C5_同层前端.md` §10.3 那条「以真实消息对账、
+ * 超时只显示『状态未知，先检查聊天』，不能自动再发一次」的落点——我们不自动重发，
+ * 重发由玩家按，但按下去之前先替他看一眼聊天。 */
+async function redeliver() {
+  if (sending.value) {
+    return;
+  }
+  sending.value = true;
+  sendError.value = '';
+  try {
+    if (sentFloorId.value >= 0 && getLastMessageId() > sentFloorId.value) {
+      undelivered.value = false;
+      sendError.value = '不用补发了——她的回应已经到了，刚才只是没等到。';
+      return;
+    }
+    sendPhase.value = '让路';
+    if ((await yieldToGeneration()) === 'timeout') {
+      sendError.value = '还有一拍生成一直没结束，这次补发没发出去。等它停下再点一次。';
+      return;
+    }
+    sendPhase.value = '发送';
+    await deliver();
+  } catch (error) {
+    undelivered.value = true;
+    sendError.value = `补发还是没成：${error instanceof Error ? error.message : String(error)}。这一手的结算与那条消息都在聊天里、没有重复，可以再点一次补发。`;
+  } finally {
+    sending.value = false;
+    sendPhase.value = '';
   }
 }
 

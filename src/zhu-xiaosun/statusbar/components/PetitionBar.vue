@@ -80,6 +80,7 @@ import { MULTIPLIER_TIERS } from '../data/stages';
 import { herHpCap, openPetitionDuel } from '../logic/duel';
 import { judgeTier, lastVerdict } from '../logic/duel-tier';
 import { useEditMode } from '../logic/edit-mode';
+import { yieldToGeneration } from '../logic/generation';
 import { herSkillSet } from '../logic/skill-table';
 import { useDataStore } from '../store';
 
@@ -132,6 +133,13 @@ const open = ref(false);
 
 const judging = ref(false);
 
+/** 判档前给上一拍生成让路的上限。**只有 3 秒**，而且超时照样往下走。
+ *
+ * 为什么不用 `generation.ts` 的 20 秒默认值：那个值是给「发出一手已结算的回合」用的，
+ * 那边宁可等也不能错发。这边按草案 §10.1 line 595 不许挡住开战，等太久等于挡住，
+ * 所以只给一个「刚好够上一拍收个尾」的短窗口，等不到就让判档自己走容错。 */
+const PETITION_YIELD_MS = 3_000;
+
 /** 请愿输入栏的内容。
  *
  * **为什么是组件本地的 ref，而不是直接绑 `store.data.决斗.$本场请愿`**：`util/mvu.ts` 的
@@ -175,7 +183,15 @@ const capPreview = computed(() =>
  * `data.决斗.$本场请愿` 取请愿（见 `logic/duel-tier.ts`），而此刻库里那一栏还是空的。
  * 拿视图喂它，判档失败或写变量失败时库里干净得像没点过这个按钮——真写进去再回滚，
  * 中间那一下会被 2 秒一次的反向同步撞见，战斗外的 MVU 里会留下一条孤零零的请愿。
- * 与 `capPreview` 同一个手法。 */
+ * 与 `capPreview` 同一个手法。
+ *
+ * **判档前让一次路，但不看结果**（2026-10-02 实测第四批）。让路是因为判档走
+ * `generateRaw`，上一拍还在飞的时候再叠一次生成请求没有好处；**不看结果**是因为
+ * 草案 §10.1 line 595「任何一层都不阻塞开战——挡住玩家发起决斗比判错档更糟」：
+ * 让不开就照样往下走，由 `judgeTier()` 那三层容错兜到 ×1.0。
+ * 这一条与 `CommandBar.send()` 里那次让路**刻意不同**——那边超时就不发，因为那边
+ * 一旦发出去就是一个已结算的回合；这边最坏结果只是档位判成 ×1.0。
+ * 上限也因此另给一个短得多的值（`PETITION_YIELD_MS`）：等 20 秒跟挡住他没区别。 */
 async function begin() {
   if (judging.value) {
     return;
@@ -185,6 +201,7 @@ async function begin() {
   // 只 trim 前后空白，中间的换行原样留着：玩家分两行写清一件事是合理的。
   const text = petition.value.trim();
   try {
+    await yieldToGeneration(PETITION_YIELD_MS);
     const verdict = await judgeTier({ ...store.data, 决斗: { ...store.data.决斗, $本场请愿: text } });
     lastVerdict.value = verdict;
     Object.assign(store.data, openPetitionDuel(store.data, verdict.倍率, text));
